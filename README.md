@@ -16,7 +16,8 @@ Machine-specific identifiers (UUIDs, IP addresses, keys) are redacted to placeho
 
 ## Two machines, A and B
 
-- **Machine A** — healthy. Daily driver, hostname `omarchy`. Screen and GPU stable.
+- **Machine A** — healthy. Daily driver, hostname **`linmac`** (was `omarchy`; wiped and
+  rebuilt 2026-09-10 after a macOS restore). Screen and GPU stable.
 - **Machine B** — **MacBookPro13,3**, hostname `headless`. Failing display / discrete GPU:
   random hard reboots, vertical screen shake, horizontal tear lines through text, and
   repeated blank-screen episodes. The same fault appears during a macOS install, so it is
@@ -32,9 +33,13 @@ Machine-specific identifiers (UUIDs, IP addresses, keys) are redacted to placeho
 Ask DMI. It is the only answer that survives a reinstall:
 
 ```sh
-cat /sys/class/dmi/id/product_name        # MacBookPro13,3 = B
-hostnamectl --static                      # headless = B
+cat /sys/class/dmi/id/product_name        # MacBookPro14,3 = A / MacBookPro13,3 = B
+hostnamectl --static                      # linmac = A / headless = B
 ```
+
+DMI is the reliable half. The hostname is not: A answered to `omarchy` until it was
+rebuilt on 2026-09-10 and came back as `linmac`, so a hostname only tells you what the
+current install was named.
 
 Do **not** use the crash history to decide:
 
@@ -45,11 +50,12 @@ journalctl -k --no-pager | grep -c 'ring gfx timeout'   # 0 on a healthy unit
 That returns `0` on a freshly reinstalled B as well — the journal only knows about the
 current install. It tells you whether *this install* has crashed, not which unit you are on.
 
-> **Unresolved:** B is `MacBookPro13,3` with dGPU PCI subsystem `0x106b0166` (verified from
-> DMI, 2026-09-10). The runbook's original machine-facts column records `MacBookPro14,3`
-> and subsystem `0x106b3900`. Both cannot describe the same unit, and A has not been
-> checked since. Next time you are on A, run the two commands above and label that column
-> for certain.
+> **Resolved (2026-09-10, read off A itself):** A is `MacBookPro14,3`, board
+> `Mac-551B86E5744E2388`, iGPU **HD Graphics 630** (Kaby Lake, `[8086:591b]`), dGPU
+> subsystem **`0x106b0179`**. B is `MacBookPro13,3` with subsystem `0x106b0166`. The two
+> are different models, as the runbook says. Two of the old A figures were wrong and are
+> now corrected: the iGPU was recorded as HD 530 (that is B's Skylake part) and the dGPU
+> subsystem as `0x106b3900` (matches neither unit).
 
 **Scope of the findings:** the Wi-Fi, microphone, Escape-key and Touch ID gaps are
 **generation-wide** — they apply to both models. The amdgpu instability and its kernel
@@ -67,7 +73,8 @@ they cost fixed GPU clocks and extra heat for nothing.
 | Keyboard / touchpad | ✓ in-kernel `applespi` | (do **not** install `macbook12-spi-driver-dkms` — breaks on kernel 7.x) |
 | Random hard reboots | ⚠ **machine B only** — no recurrence since kernel 7.2.3, unproven | `amdgpu.dpm=0 amdgpu.aspm=0` |
 | Screen shake / tear lines / blank-on-wake | ✗ **machine B only** — **unfixable in software**, panel abandoned | run headless (`sddm` disabled) |
-| Touch ID | ✗ needs original `EFI/APPLE` FDR data | back it up from macOS **before** wiping (runbook Step 0) |
+| Touch ID / Touch Bar | ✗ T1 stuck in recovery (`05ac:1281`) on both units; FDR data **is** backed up for both | ESP restore + cold boots + SMC reset all **failed** on A — needs the Linux-only USB activation (runbook, "Routes to an activated T1" route 3) |
+| T1Bridge stack | ✓ installed & verified on A (`0.1.7-1`) | signed `[standardagents]` repo; waiting on an activated T1 to do anything |
 | Lid close suspends a headless box | ✓ fixed | `logind.conf.d` `HandleLidSwitch=ignore` |
 | Reaching B once its panel fails | ✓ fixed | SSH + key + LAN-scoped `ufw` rule (runbook, Headless duty) |
 

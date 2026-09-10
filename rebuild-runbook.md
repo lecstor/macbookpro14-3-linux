@@ -14,23 +14,27 @@ Two units, and they are **different models** — both read off their own hardwar
 internal panel, same Wi-Fi, same audio codec. That two generations behave identically is
 why these notes should carry to any Touch Bar T1 Mac.
 
-| | machine A (`omarchy`) | machine B (`headless`) |
+| | machine A (`linmac`) | machine B (`headless`) |
 |---|---|---|
 | Model | **MacBookPro14,3** (15", 2017, Touch Bar, T1), board `Mac-551B86E5744E2388` | **MacBookPro13,3** (15", 2016, Touch Bar, T1), board `Mac-A5C67F76ED83108C` |
 | Kernel | `7.2.3-arch1-3` (was `7.1.9.arch1-2` until 2026-09-10) | `7.2.3-arch1-3` |
 | systemd | `261.2-1` | `261.2-1` |
 | Root | LUKS, btrfs `@` subvol | LUKS, btrfs `@` subvol; 2 GB vfat ESP at `/boot` |
-| iGPU | Intel HD Graphics 530 — `i915`, `card0`, **no connected outputs** | same — `[8086:191b]`, all outputs disconnected |
+| iGPU | Intel HD Graphics **630** (Kaby Lake) — `[8086:591b]`, `i915`, `card0`, **no connected outputs** | HD Graphics 530 (Skylake) — `[8086:191b]`, all outputs disconnected |
 | dGPU | AMD Radeon Pro 555 "Baffin / POLARIS11" `[1002:67ef]` — `amdgpu`, `card1`, **drives the internal panel (eDP-1)** | same `[1002:67ef]`, `card1-eDP-1: connected` |
 | Wi-Fi (internal) | BCM43602 fullmac — `brcmfmac`, firmware `Nov 10 2015` | same `[14e4:43ba]`, firmware `Nov 10 2015 version 7.35.177.61` |
 | Audio codec | Cirrus CS8409 + CS42L83 sub-codec | same — CS8409 on the Intel PCH (ALSA card `PCH`) |
-| dGPU PCI subsystem | `0x106b3900` | `0x106b0166` |
+| dGPU PCI subsystem | `0x106b0179` | `0x106b0166` |
 | Network in service | — | USB CDC-NCM ethernet dongle `[0b95:1790]`, `cdc_ncm` |
 
 > Earlier notes flagged these rows as a mislabelling. They are not: A really is a 2017
 > 14,3 and B a 2016 13,3, each confirmed from its own `/sys/class/dmi/id/`, and the
-> differing dGPU subsystems (`0x106b3900` vs `0x106b0166`) follow from that rather than
+> differing dGPU subsystems (`0x106b0179` vs `0x106b0166`) follow from that rather than
 > contradicting it. Both columns are correct.
+>
+> A's column was re-read off the machine on 2026-09-10 and two figures were wrong: the
+> iGPU (recorded as HD 530, which is B's Skylake part — A is Kaby Lake HD 630) and the
+> dGPU subsystem (recorded as `0x106b3900`, which matches neither unit).
 
 ---
 
@@ -62,8 +66,20 @@ re-paired even by reinstalling macOS.
 > and enumerates as USB `05ac:1281` instead of an activated `05ac:8600`. See
 > [Touch Bar and the T1's state](#touch-bar-and-the-t1s-state).
 >
-> **A still needs its own restore.** FDR data is bound to one physical T1, so B's USB
-> backup is useless for A.
+> **A has since had its own restore — done 2026-09-10.** The line that used to sit here
+> ("A still needs its own restore") is obsolete. A went through the full macOS restore and
+> its `EFI/APPLE` was backed up at 15:56 that day; the Omarchy install that followed booted
+> at 16:13 and took the ESP with it, exactly as on B. **Both units' backups now sit on the
+> one USB key**, as sibling directories:
+>
+> ```
+> mbp143-A-efi-backup-2026-09-10/   FIRMWARE/MBP143.fd   EMBEDDEDOS/FDRData (209,888 B)
+> mbp133-B-efi-backup-2026-09-10/   FIRMWARE/MBP133.fd   EMBEDDEDOS/FDRData (209,892 B)
+> ```
+>
+> Verified distinct by hash, and each `FIRMWARE/*.fd` matches its unit's model — so the
+> directory names are trustworthy. A second copy of A's lives on A at `~/t1-backup/`.
+> FDR data is still bound to one physical T1: **do not cross them.**
 
 ### Regenerate it — reinstall macOS from scratch
 
@@ -145,14 +161,44 @@ EFI-tree/FDR backup as a working import source, so the USB backup is enough on i
 **Fallback — copying back onto the ESP.** Only if the importer cannot read the backup:
 
 1. Mount the ESP: `sudo mount /dev/nvme0n1p1 /mnt/esp` (whichever partition is the vfat ESP)
-2. `sudo cp -a /path/to/APPLE-backup-YYYY-MM-DD/. /mnt/esp/EFI/APPLE/`
-3. `sudo sync && sudo umount /mnt/esp`, then reboot.
+   — on Omarchy the ESP is already mounted at `/boot`, so no separate mount is needed.
+2. `sudo cp -r --no-preserve=mode,ownership,timestamps \`
+   `  /path/to/APPLE-backup-YYYY-MM-DD/. /mnt/esp/EFI/APPLE/`
+3. `sudo sync`, then reboot.
 
-> **⚠ The ESP-write path is the part to validate.** Backing up `EFI/APPLE` before the wipe is
-> well established. Copying it back onto a freshly-created ESP *should* restore the pairing,
-> but confirm against current t2linux / Arch-on-Mac documentation at the time you do it —
-> the T1 may need the files at specific paths, and a bridgeOS revive may still be required.
-> The importer route above avoids this uncertainty entirely, which is why it is listed first.
+> **Use `cp -r --no-preserve=…`, not `cp -a`.** vfat has no concept of ownership, so `cp -a`
+> emits `failed to preserve ownership` for every single file and **exits non-zero** — which
+> aborts any `set -e` script mid-copy. The files themselves copy fine; it is the exit status
+> that bites. Verify by hashing afterwards rather than trusting `cp`'s return code.
+
+> ### ⚠ MEASURED 2026-09-10 ON MACHINE A: this does **not** wake a T1 that is in recovery.
+>
+> This was the open question in earlier revisions. It now has an answer, and the answer is no.
+>
+> A's own `EFI/APPLE/` (all five subdirectories, `EMBEDDEDOS/FDRData` byte-identical to the
+> backup by sha256) was restored to `/boot/EFI/APPLE/` and then put through:
+>
+> | attempt | result |
+> |---|---|
+> | cold boot (full power-off, not reboot) | `05ac:1281` — unchanged |
+> | second cold boot | `05ac:1281` — unchanged |
+> | SMC reset (left Shift+Ctrl+Option+power, 10 s) | `05ac:1281` — unchanged |
+>
+> The Mac's EFI firmware never re-attempts the T1 boot. `t1_cfgsel` loads and registers
+> `t1bridge-cfgselector`, but `apple_t1_ncm` has nothing to bind to and no NCM interface
+> appears, so T1Bridge has no device to talk to (`t1-touchbar-hw.service` fails with
+> `result 'dependency'`).
+>
+> **Conclusion: a T1 already in recovery needs an *active* restore over USB — reset the T1,
+> replay the image plus an auth ticket — not a passive file copy.** That is exactly what the
+> Linux-only route does, and rereading its wording ("reset the T1, replay image + ticket")
+> the distinction was there all along. Copy the data back anyway: every route needs it
+> present on the machine. Just do not expect it to activate anything by itself.
+>
+> A 14,2 tester [reports the plain copy working](https://github.com/standardagents/t1bridge/issues/2#issuecomment-5563782774)
+> from an identical layout (ESP at `/boot`, vfat `nvme0n1p1` 2 G, same three files,
+> bridgeOS 910). Unreconciled — possibly their T1 was not as deeply in recovery, possibly
+> they restored the whole ESP image rather than the `EFI/APPLE` subtree.
 
 ### If you have **no** backup and macOS is already gone
 
@@ -186,13 +232,16 @@ done
 | `05ac:8600` | T1 activated and running its EmbeddedOS — a driver is all you need |
 | `05ac:1281` | `Apple Mobile Device (Recovery Mode)` — no working EmbeddedOS; a driver alone will do nothing |
 
-**Both units read `05ac:1281`** (2026-09-10) — A as well as B — because each Omarchy
-install wiped the ESP that held the T1's EmbeddedOS. B's FDR backup on the USB key is what
-would bring B back; A has no backup and needs the full macOS restore.
+**Both units read `05ac:1281`** (re-checked on A 2026-09-10, after its rebuild) — because
+each Omarchy install wiped the ESP that held the T1's EmbeddedOS. **Both now have their own
+FDR backup on the USB key**, so neither needs another macOS restore — but note that having
+the backup is *not* the same as being able to use it: putting the data back on the ESP was
+measured on A and does **not** lift a T1 out of recovery. Route 3 is the realistic one for a
+machine in this state.
 
 Practical consequence for A: its Touch Bar has never worked under Linux and no driver would
 have helped, which matches what the kernel sees — only `Apple SPI Keyboard` enumerates, with
-no Touch Bar device at all.
+no Touch Bar device at all. That stays true until the T1 is activated from the backup.
 
 ### Touch Bar is not Touch ID
 
@@ -205,8 +254,10 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 
 ### Routes to an activated T1
 
-1. **Restore your own `EFI/APPLE` backup** — the cheapest, if you have one from this exact
-   machine. See "Restore it" in Step 0.
+1. ~~**Restore your own `EFI/APPLE` backup**~~ — **tried on A 2026-09-10, does not work from
+   recovery.** Two cold boots and an SMC reset with correct, hash-verified data on the ESP
+   left the T1 at `05ac:1281`. Still do the copy — routes 2 and 3 want that data present —
+   but it is not a route on its own. See the measured box in Step 0.
 2. **Full macOS restore** (Step 0). Regenerates FDR from scratch. **Needs a working screen**
    — Disk Utility and Setup Assistant cannot be driven blind, so on a machine with a dead
    panel this route requires an external monitor first.
@@ -220,9 +271,65 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 
 ### Drivers (once the T1 is activated)
 
-- **T1Bridge** — Touch Bar + Touch ID. **Not in the AUR** (`aur/rpc/v5/search/t1bridge`
-  returns 0 results, checked 2026-09-10); it ships as a signed pacman repo for Arch and
-  Omarchy, so that repo has to be added before Step 0's `pacman -S t1bridge …` will resolve.
+- **T1Bridge** — Touch Bar + Touch ID + camera. Source: <https://github.com/standardagents/t1bridge>
+  (MIT). **Not in the AUR, and not in any repo Omarchy ships with**: re-checked on A
+  2026-09-10, `pacman -Ss t1bridge` across `core`/`extra`/`multilib`/`omarchy` and
+  `yay -Ss t1bridge` both return 0 results. Installed and verified on A 2026-09-10 —
+  full procedure below.
+
+#### Installing T1Bridge (done on A 2026-09-10)
+
+Trust the key first. The fingerprint is published both by the server *and* in the GitHub
+README, which is what makes it worth trusting — a fingerprint checked only against the same
+host that served the key proves nothing beyond HTTPS.
+
+```sh
+key_dir=$(mktemp -d)
+curl -fSLo "$key_dir/key.asc" \
+  https://linux.standardagents.ai/arch/standardagents/x86_64/t1bridge-signing-key.asc
+gpg --show-keys --with-fingerprint "$key_dir/key.asc"
+# MUST read exactly:  35B166F78B063B04DE1E3D913E6C4216EB03D371
+#   uid: Andrew Boyd (Standard Agents Linux packages) <andrew@formkit.com>
+sudo pacman-key --add "$key_dir/key.asc"
+sudo pacman-key --lsign-key 35B166F78B063B04DE1E3D913E6C4216EB03D371
+```
+
+Then append to `/etc/pacman.conf` — `$repo` and `$arch` stay **literal**:
+
+```ini
+[standardagents]
+SigLevel = Required DatabaseRequired
+Server = https://linux.standardagents.ai/arch/$repo/$arch
+```
+
+```sh
+omarchy update      # NOT `pacman -Syu` (Omarchy's guard) and NOT `pacman -Sy` (partial upgrade)
+sudo pacman -S --needed linux-headers t1bridge t1bridge-dkms libfprint-t1bridge fprintd-t1bridge
+sudo systemd-sysusers /usr/lib/sysusers.d/t1bridge.conf
+sudo systemd-tmpfiles --create /usr/lib/tmpfiles.d/t1bridge.conf
+sudo usermod -aG t1bridge "$(id -un)"
+sudo systemctl daemon-reload
+sudo systemctl enable t1-touchbar-hw.service t1-touchid-auth.socket t1bridge-fingerprint.socket
+```
+
+> **Install all four packages in one command.** `libfprint-t1bridge` and `fprintd-t1bridge`
+> `conflict`/`provide` the distro pair and must stay matched. On A the install silently went
+> ahead with only three of the four (`fprintd-t1bridge` missing), which made the
+> service-enable step abort on its own package check and left every unit disabled — with no
+> error anywhere obvious. Check with
+> `pacman -Q t1bridge t1bridge-dkms libfprint-t1bridge fprintd-t1bridge` before moving on.
+> `fprintd` / `libfprint` are absent from a stock Omarchy install, so the pair installs clean.
+
+Versions as installed on A: `t1bridge 0.1.7-1`, `t1bridge-dkms 0.1.7-1`,
+`libfprint-t1bridge 1.94.100-15`, `fprintd-t1bridge 1.94.5-12`.
+
+**Then check the xART firewall prerequisite before enrolling.** xART needs inbound IPv6 TCP
+**61500** on the dynamically discovered private T1 interface, and only there — never on
+Wi-Fi/LAN. Omarchy's default-deny `ufw` blocks it, and both the 14,2 and 14,3 testers saw
+enrollment fail until they opened it *scoped to that interface*. The 14,3 report also needed
+a **full shutdown/power-on**, not a warm reboot, before enrollment worked.
+
+None of this runs until the T1 is out of recovery — see the measured box in Step 0.
 - **`t1-touchbar`** — DKMS driver, Touch Bar only, claims to build on kernel 7.x:
   <https://github.com/AJ-dev-i60/t1-touchbar>
 - **Not `macbook12-spi-driver-dkms`** — its `apple-ibridge` is the old T1 Touch Bar route
@@ -410,13 +517,26 @@ PipeWire volume across reboots; the ALSA `Internal Mic` / `Internal Mic Boost` c
 already at max on a stock Omarchy install but set them explicitly to be sure.
 
 ```
-pactl set-source-volume alsa_input.pci-0000_00_1f.3.analog-stereo 900%
+pactl set-source-volume alsa_input.pci-0000_00_1f.3.analog-stereo 500%
 amixer -c PCH sset 'Internal Mic' 100%
 amixer -c PCH sset 'Internal Mic Boost' 100%
 ```
 
-If speech comes out clipped/garbled once the hardware works, 900 % is too hot — try
-400–500 %.
+> **900 % is too hot on machine A — use 500 %.** Measured 2026-09-10 by recording ambient
+> room noise at each setting with the ALSA controls at max:
+>
+> | PipeWire volume | ambient rms | peak | clipped samples |
+> |---|---|---|---|
+> | 900 % | 9889 | 32767 | **2642** |
+> | 700 % | 494 | 2069 | 0 |
+> | 500 % | 514 | 2132 | 0 |
+> | 400 % | 493 | 2106 | 0 |
+>
+> 900 % clips hard on *ambient noise alone*; speech is far worse. 400–700 % all behave
+> identically, so 500 % sits mid-range with ~65x headroom. The hardware gain (`Internal Mic`
+> +12 dB, `Internal Mic Boost` +20 dB) is what actually lifts this mic off the floor — at
+> 100 % PipeWire volume it records rms ≈ 10–17, i.e. effectively silence, which is the
+> quietness the driver fix exists to solve.
 
 ### 6. Enable voxtype's evdev hotkey
 
@@ -424,11 +544,26 @@ Without the `input` group the daemon logs *"No keyboard device found in /dev/inp
 **no key works at all** — the configured key name is a red herring.
 
 ```
+sudo pacman -S --needed voxtype-bin       # in the `omarchy` repo, not the AUR
 sudo usermod -aG input $USER
+voxtype setup --download                  # REQUIRED: the whisper model is not bundled
 voxtype config set hotkey.enabled true    # stock config had this false (Hyprland-bind mode)
 voxtype config set hotkey.key CAPSLOCK
+systemctl --user enable voxtype           # ships disabled; preset alone does not enable it
 # REBOOT — a logout is not enough (see gotchas)
 ```
+
+Three things the original version of this step missed, all hit on A 2026-09-10:
+
+- **There are two config files.** `voxtype config set` run as root writes
+  `/etc/voxtype/config.toml`; run as your user it writes `~/.config/voxtype/config.toml`.
+  **The user one is what the daemon uses** — `voxtype setup check` reports the `/etc` one as
+  a missing config. Run these as your normal user, not under `sudo`.
+- **The model is a separate ~141 MB download.** Without `voxtype setup --download` the daemon
+  crash-loops with `Model 'base.en' not found` and `systemctl --user is-active voxtype`
+  reports `activating` forever.
+- **`voxtype setup check` is the fast way to confirm all of it** — it green-checks the config
+  file, the `input` group, the model and the output chain in one shot.
 
 CapsLock is push-to-talk (hold to record, release to transcribe). If it toggles caps state
 or feels wrong: `RIGHTCTRL`, `RIGHTALT`, `F13`, or `SCROLLLOCK` instead
@@ -683,6 +818,29 @@ association is offloaded to firmware. Re-entering the password will not help.
 handle — something grabbed the source while voxtype had it suspended. Not a
 reconfiguration: `systemctl --user restart voxtype`.
 
+**voxtype drops the first one or two characters of every transcription**, while the OSD
+toast shows the text in full. The transcription is fine; the loss is in delivery. voxtype's
+default `mode = "type"` synthesises the text keystroke-by-keystroke through `wtype`, and the
+leading keystrokes land before the target window is ready for them. Neither documented knob
+helps, because both address the wrong thing — `type_delay_ms` spaces out characters *after*
+the first, and `wtype_shift_prefix` is aimed at CJK input methods:
+
+```sh
+voxtype config set output.mode paste      # deliver as one clipboard write + one paste
+sed -i 's/^# restore_clipboard = false$/restore_clipboard = true/' ~/.config/voxtype/config.toml
+systemctl --user restart voxtype
+```
+
+`paste` mode has no leading keystrokes to lose, and `restore_clipboard` puts your clipboard
+back afterwards. Verified fixed on A 2026-09-10. Note `voxtype config set` only accepts keys
+listed by `voxtype config schema` — `output.mode` is settable, `restore_clipboard`,
+`type_delay_ms` and `wtype_shift_prefix` are not, so those need editing the TOML directly.
+
+**Don't bother with the runbook's alternative hotkeys on a Touch Bar Mac.** Of the usual
+suggestions (`RIGHTCTRL`, `RIGHTALT`, `F13`, `SCROLLLOCK`), this keyboard physically has only
+`RIGHTALT` — there is no right Ctrl, no F13 and no ScrollLock. CapsLock is fine once output
+is in `paste` mode.
+
 **Audio dies after a kernel update.** Check `dkms status` first — the out-of-tree audio
 driver failing to rebuild is the likely cause. Roll back with
 `sudo dkms remove snd-hda-macbookpro/0.1 --all` then
@@ -758,6 +916,13 @@ parecord --device=alsa_input.pci-0000_00_1f.3.analog-stereo \
 
 kernel `7.2.3-arch1-3` · systemd `261.2` · voxtype `1.0.1` ·
 `snd-hda-macbookpro-dkms-git 0.1-3` · `linux-headers 7.2.3.arch1-3`
+
+Machine A full rebuild (2026-09-10), verified end to end: `voxtype-bin 1.0.1-1` ·
+`t1bridge 0.1.7-1` · `t1bridge-dkms 0.1.7-1` · `libfprint-t1bridge 1.94.100-15` ·
+`fprintd-t1bridge 1.94.5-12` · `openssh 10.5p1-1`. Working: Apple audio path
+(`Primary patch_cs8409 NOT FOUND trying APPLE`), internal mic at 500 %, voxtype push-to-talk
+in `paste` mode, `SUPER+TAB` Escape, sshd + LAN-scoped `ufw`. Not working: the T1, which is
+still in recovery.
 
 Headless section (machine B, 2026-09-10): `openssh 10.5p1-1` · `ufw 0.36.2-7` ·
 `avahi 1:0.9rc5-1` · `nss-mdns 0.15.1-2`
