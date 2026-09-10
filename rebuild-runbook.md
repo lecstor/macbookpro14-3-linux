@@ -368,6 +368,15 @@ Trade-off: GPU runs at fixed clocks — slightly more heat / battery. If the pan
 /sys/class/drm/card1/device/power_dpm_force_performance_level` pins clocks (stops the
 transitions). `auto` reverts.
 
+> **The stopgap and `amdgpu.dpm=0` are mutually exclusive.** `dpm=0` disables the power
+> management subsystem outright, and with it the whole sysfs interface —
+> `power_dpm_force_performance_level`, `pp_dpm_sclk` and `gpu_busy_percent` do not exist
+> after a boot with the param set (verified on B, 2026-09-10; only `power` and
+> `power_state` remain under `/sys/class/drm/card1/device/`). So the stopgap is for
+> *before* you reboot into these params, and any later attempt to read clocks or GPU
+> busy-ness for diagnosis needs `dpm=0` dropped from the cmdline first. Verify with
+> `cat /sys/module/amdgpu/parameters/dpm` instead — that one still reads back.
+
 ### 9. Bind an Escape key
 
 Append to `~/.config/hypr/bindings.lua`. The down/up split is Omarchy's own workaround,
@@ -538,6 +547,10 @@ in-kernel `applespi` covers keyboard + touchpad.
 
 **GPU stuck at max clock while idle / screen shaking.** amdgpu DPM misbehaving. Stopgap:
 force `power_dpm_force_performance_level` to `high`. Durable: step 8 kernel params.
+
+**`power_dpm_force_performance_level: No such file or directory`.** Not a wrong card number
+— you are already booted with `amdgpu.dpm=0`, which removes every DPM sysfs knob. Nothing
+to fix; see the note in step 8.
 
 ---
 

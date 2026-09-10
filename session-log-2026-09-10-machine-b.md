@@ -93,15 +93,45 @@ Re-checked after the Omarchy reinstall: `/boot` is a 2 GB vfat ESP holding only 
 `limine` and `Linux` — **no `EFI/APPLE`**. The macOS-reinstall route to regenerate FDR data
 has not been taken on this machine. Runbook Step 0 still applies unchanged.
 
+## 4. Post-reboot verification
+
+Rebooted the same day. Everything took, and everything persisted:
+
+| check | result |
+|---|---|
+| `/proc/cmdline` | starts with the three `amdgpu.*` params |
+| `/sys/module/amdgpu/parameters/{dpm,aspm,dcdebugmask}` | `0` / `0` / `16` |
+| amdgpu init | clean — `Display Core v3.2.384 initialized on DCE 11.2`, no errors |
+| `ring gfx timeout` this boot | 0 |
+| `card1-eDP-1` | still `connected` — panel driven normally with PSR off |
+| `systemctl is-active sshd` | `active`, listening on 22 (v4 + v6) |
+| `HandleLidSwitch` over D-Bus | `s "ignore"` |
+| `ufw status` | LAN rule for 22/tcp intact |
+
+The kernel log also confirms B's dGPU identity independently of DMI:
+`initializing kernel modesetting (POLARIS11 0x1002:0x67EF 0x106B:0x0166 0xC7)` — subsystem
+`0x106b0166`, as recorded in the machine-facts table.
+
+**Discovery: `amdgpu.dpm=0` removes the DPM sysfs interface entirely.** After the reboot,
+`power_dpm_force_performance_level`, `pp_dpm_sclk` and `gpu_busy_percent` no longer exist
+under `/sys/class/drm/card1/device/` (only `power` and `power_state` remain). The
+`powerplay` IP block is still detected at init, but the knobs are gone. So the runbook's
+live stopgap only works *before* rebooting into these params, and any future attempt to
+watch clocks or GPU busy-ness for diagnosis has to drop `dpm=0` first. Runbook updated with
+the note and a matching gotcha entry.
+
+The ACPI errors in the boot log (`AE_ALREADY_EXISTS` on SSDT loads, `\_SB.OSCP` not found)
+are ordinary Apple firmware noise on this generation, unrelated to the GPU work.
+
 ## Open items
 
-- [ ] **Reboot B** to activate the amdgpu params. Then: `cat /proc/cmdline`,
-      `cat /sys/module/amdgpu/parameters/dpm` (want `0`),
-      `cat /sys/module/amdgpu/parameters/dcdebugmask` (want `16`).
+- [x] Reboot B — done, params active (see above).
+- [ ] **Watch for the shake and the blank-on-wake.** With the params now live, this is the
+      real test; success = 1–2 weeks of normal idle/wake cycles with neither. Note the
+      pre-reboot `power_dpm_force_performance_level=high` stopgap can no longer be used as
+      a comparison — `dpm=0` removed the knob.
 - [ ] Confirm key-based SSH from machine A, then set `PasswordAuthentication no` in
       `/etc/ssh/sshd_config.d/10-headless.conf` and `systemctl reload sshd`.
-- [ ] Report whether `power_dpm_force_performance_level=high` eased the shake — it is the
-      cleanest signal available on whether DPM transitions are the trigger.
 - [ ] Consider an `ed25519` key for B rather than the existing 2048-bit RSA one.
 - [ ] Off-LAN access (Tailscale / WireGuard) if B needs to be reachable from outside the
       LAN. Not set up; the `ufw` rule is LAN-scoped on purpose.
