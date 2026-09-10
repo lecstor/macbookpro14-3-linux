@@ -183,11 +183,15 @@ EFI-tree/FDR backup as a working import source, so the USB backup is enough on i
 > | cold boot (full power-off, not reboot) | `05ac:1281` — unchanged |
 > | second cold boot | `05ac:1281` — unchanged |
 > | SMC reset (left Shift+Ctrl+Option+power, 10 s) | `05ac:1281` — unchanged |
+> | NVRAM/PRAM reset (Cmd+Option+P+R, two chimes) | `05ac:1281` — unchanged |
 >
 > The Mac's EFI firmware never re-attempts the T1 boot. `t1_cfgsel` loads and registers
 > `t1bridge-cfgselector`, but `apple_t1_ncm` has nothing to bind to and no NCM interface
 > appears, so T1Bridge has no device to talk to (`t1-touchbar-hw.service` fails with
 > `result 'dependency'`).
+>
+> That is every cheap route: nothing that only power-cycles, resets firmware state, or puts
+> the right bytes on disk moves the T1 out of recovery.
 >
 > **Conclusion: a T1 already in recovery needs an *active* restore over USB — reset the T1,
 > replay the image plus an auth ticket — not a passive file copy.** That is exactly what the
