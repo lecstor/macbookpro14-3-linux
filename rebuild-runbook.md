@@ -857,6 +857,81 @@ from another host tests the firewall.
 
 ---
 
+## Apps and tooling
+
+Software beyond stock Omarchy that is not a hardware fix. None of it is order-sensitive and
+none of it needs a reboot.
+
+### OpenCode 2 (beta) — mise, plus a launcher entry
+
+Done on A 2026-09-11. OpenCode v2 is a terminal app. It installs as **`opencode2`**, so it
+sits alongside Omarchy's stock `opencode` (v1, a mise wrapper in `~/.local/bin`) without
+conflict. The beta ships no Linux desktop build, so nothing puts it in the launcher —
+`omarchy-tui-install` does that.
+
+**Install through mise, not `npm i -g`.** Node is mise-managed and pinned, and `npm i -g`
+lands inside that Node version's prefix — it silently disappears on the next Node upgrade.
+In `~/.config/mise/config.toml`:
+
+```toml
+[tools]
+"npm:@opencode/cli" = { version = "beta", allow_builds = ["@opencode/cli"] }
+
+[settings.npm]
+package_manager = "npm"
+```
+
+```sh
+mise install npm:@opencode/cli@beta
+opencode2 --version        # opencode2 v0.0.0-beta-19425
+```
+
+Both settings are required:
+
+- **`allow_builds`** — mise skips npm install scripts by default, and without the package's
+  `postinstall.mjs` the command refuses to run (`@opencode/cli's postinstall script was not
+  run.`). The script (reviewed 2026-09-11) picks the platform binary from the
+  `@opencode/cli-<platform>` optional dependencies (AVX2 and musl checks), hard-links it
+  over the `bin/opencode2.exe` placeholder, and runs `--version`; if that package is
+  missing it `npm install`s it into a temp dir. The approval covers this package only.
+- **`package_manager = "npm"`** — the default (`auto`) picks aube, which aborts the install;
+  see gotchas. mise only offers this setting globally, not per tool. OpenCode is the only
+  `npm:` tool in the global config (`claude`, `codex`, `gh` are `aqua:`), so it affects
+  nothing else.
+
+**Launcher entry** (`SUPER+SPACE`):
+
+```sh
+omarchy-tui-install "OpenCode 2" "bash -lc opencode2" tile https://opencode.ai/favicon-96x96-v3.png
+```
+
+That writes `~/.local/share/applications/OpenCode 2.desktop`
+(`Exec=xdg-terminal-exec --app-id=TUI.tile -e bash -lc opencode2`) and the icon to
+`~/.local/share/icons/hicolor/256x256/apps/opencode-2.png`. `bash -lc` is there because the
+launcher does not load your shell setup; a login shell does, so the mise shim is found.
+`tile` opens it as a normal tiled window — `float` for a floating one. Remove with
+`omarchy-tui-remove`.
+
+The launcher starts it in `~`. OpenCode works on the directory it starts in, so for project
+work run `opencode2` from inside the project instead.
+
+**Updating.** `mise upgrade` does not track the `beta` dist-tag (it reports
+`no latest version found`, then "All tools are up to date"). Reinstall instead:
+
+```sh
+mise install --force npm:@opencode/cli@beta
+```
+
+### Verify
+
+| command | pass condition |
+|---|---|
+| `opencode2 --version` | `opencode2 v0.0.0-beta-…` |
+| `env -i HOME="$HOME" PATH=/usr/bin:/bin bash -lc 'command -v opencode2'` | a path under `~/.local/share/mise/shims/` — what the launcher entry relies on |
+| `mise settings get npm.package_manager` | `npm` |
+
+---
+
 ## Gotchas that cost real time
 
 Each of these presents as a different problem than it is.
@@ -943,6 +1018,16 @@ works and is the one the omarchy skill prescribes.
 — you are already booted with `amdgpu.dpm=0`, which removes every DPM sysfs knob. Nothing
 to fix; see the note in step 8.
 
+**`` aube install failed: user aborted `mise add @opencode/cli` ``.** Not a network or package
+problem. With mise's `npm.package_manager` left on `auto`, installs of `npm:` tools go
+through aube, which stops at an interactive prompt; with no terminal to answer it (seen from
+an agent session) it aborts. Adding `allow_builds` does not get past it. Set
+`npm.package_manager = "npm"` (Apps and tooling). Not tested from an interactive terminal.
+
+**`mise ERROR opencode2 is not a valid shim` right after a reinstall.** A failed
+`mise install --force` removes the working copy *before* the new install fails, leaving the
+shim pointing at nothing. Fix the cause of the failure, then reinstall.
+
 ---
 
 ## Verification
@@ -958,6 +1043,7 @@ Run these after a rebuild. Each has one unambiguous pass condition.
 | `iw dev <usb-iface> link` | associated on **5 GHz**, not 2.4 GHz |
 | `cat /sys/module/amdgpu/parameters/dpm` | `0` |
 | `hyprctl configerrors` | empty output |
+| `opencode2 --version` | `opencode2 v0.0.0-beta-…` (see Apps and tooling) |
 | `systemctl is-active sshd` | `active` (headless units) |
 | `busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager HandleLidSwitch` | `s "ignore"` (headless units) |
 
@@ -986,6 +1072,9 @@ still in recovery.
 
 Headless section (machine B, 2026-09-10): `openssh 10.5p1-1` · `ufw 0.36.2-7` ·
 `avahi 1:0.9rc5-1` · `nss-mdns 0.15.1-2`
+
+Apps and tooling (machine A, 2026-09-11): `@opencode/cli 0.0.0-beta-19425` ·
+mise `2026.9.4` · node `26.8.1` · npm `11.19.0`
 
 The Wi-Fi and audio findings are hardware-generation limits and will outlive these package
 versions; the exact commands may not.

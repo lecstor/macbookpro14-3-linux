@@ -82,5 +82,10 @@ they cost fixed GPU clocks and extra heat for nothing.
 
 - Canonical copy of these docs is this git repo. A rendered mirror may exist as a Claude
   artifact; treat it as read-only / possibly stale.
+- Apps and CLI tools installed beyond stock Omarchy — not hardware fixes, e.g. OpenCode 2
+  and its launcher entry — are in the runbook's
+  [Apps and tooling](rebuild-runbook.md#apps-and-tooling) section.
+- On the machines, `~/Work/AGENTS.md` (imported by `~/Work/CLAUDE.md`) points agents at
+  this repo. Record setup changes here, not in an agent's private memory.
 - Privileged commands in the runbook use `sudo` (assumes a terminal). In an agent context
   without a TTY, `pkexec <cmd>` substitutes.
