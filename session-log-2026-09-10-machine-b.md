@@ -90,8 +90,13 @@ known history.
 ## 3. Touch ID / EFI status on B
 
 Re-checked after the Omarchy reinstall: `/boot` is a 2 GB vfat ESP holding only `BOOT`,
-`limine` and `Linux` — **no `EFI/APPLE`**. The macOS-reinstall route to regenerate FDR data
-has not been taken on this machine. Runbook Step 0 still applies unchanged.
+`limine` and `Linux` — **no `EFI/APPLE`**.
+
+> **Corrected later the same day.** I read the empty ESP as "the macOS restore never
+> happened here". It did: B was restored, its `EFI/APPLE` was backed up to a USB key, and
+> the Omarchy install afterwards rewrote the ESP. The USB key holds the only copy of B's
+> FDR data. The lesson for the runbook: an empty ESP dates the last thing that wrote to the
+> disk, and says nothing about whether a restore preceded it.
 
 ## 4. Post-reboot verification
 

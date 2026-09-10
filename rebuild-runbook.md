@@ -46,11 +46,22 @@ cryptographically tied to *this specific T1* — another Mac's copy is useless. 
 installer that reformats or overwrites the ESP destroys it, and then Touch ID cannot be
 re-paired even by reinstalling macOS.
 
-> **Status (checked 2026-09-10, both units):** the NVMe is Linux-only — a 2 GB Linux ESP
-> + a LUKS/btrfs root, no macOS partition, no `EFI/APPLE`. On B this was re-checked after
-> its Omarchy reinstall and is still true: `/boot/EFI` holds only `BOOT`, `limine` and
-> `Linux`. The Apple data is already gone, so the only way to get it back is a from-scratch
-> macOS reinstall (below) — which has **not** happened on B.
+> **Status (checked 2026-09-10):** the NVMe is Linux-only — a 2 GB Linux ESP + a
+> LUKS/btrfs root, no macOS partition, no `EFI/APPLE` (`/boot/EFI` holds only `BOOT`,
+> `limine` and `Linux`).
+>
+> **On B this does not mean the restore never happened — it did.** B went through the full
+> macOS restore, its `EFI/APPLE` was backed up to a USB key, and the subsequent Omarchy
+> install then rewrote the ESP and took `EFI/APPLE` with it. The backup is the surviving
+> copy. **An empty ESP tells you what touched the disk last, not whether a restore ever
+> happened** — do not infer one from the other.
+>
+> A visible consequence: with no EmbeddedOS on the ESP, B's T1 falls back to recovery mode
+> and enumerates as USB `05ac:1281` instead of an activated `05ac:8600`. See
+> [Touch Bar and the T1's state](#touch-bar-and-the-t1s-state).
+>
+> **A still needs its own restore.** FDR data is bound to one physical T1, so B's USB
+> backup is useless for A.
 
 ### Regenerate it — reinstall macOS from scratch
 
@@ -153,6 +164,65 @@ The only route is:
 
 A revive reinstalls the T1 firmware but does **not** by itself restore the machine-specific
 FDR data — macOS's first boot does. Verify the details before relying on this.
+
+---
+
+## Touch Bar and the T1's state
+
+Before planning any Touch Bar work, **ask the T1 what state it is in.** It enumerates as a
+USB device, and the product id is the whole answer:
+
+```sh
+for d in /sys/bus/usb/devices/*/; do
+  v=$(cat "$d/idVendor" 2>/dev/null); p=$(cat "$d/idProduct" 2>/dev/null)
+  [ "$v" = "05ac" ] && echo "$v:$p $(cat $d/product 2>/dev/null)"
+done
+```
+
+| id | meaning |
+|---|---|
+| `05ac:8600` | T1 activated and running its EmbeddedOS — a driver is all you need |
+| `05ac:1281` | `Apple Mobile Device (Recovery Mode)` — no working EmbeddedOS; a driver alone will do nothing |
+
+**B reads `05ac:1281`** (2026-09-10), because the Omarchy install wiped the ESP that held
+the T1's EmbeddedOS. Its FDR backup on the USB key is what would bring it back.
+
+### Touch Bar is not Touch ID
+
+Step 0 says the FDR data is only needed for Touch ID. That is true *for fingerprints*, but
+it hides a trap: if the T1 is in recovery mode, the **Touch Bar** needs activation too, and
+activation is what consumes the FDR/EmbeddedOS material. Read it as:
+
+- T1 already activated (`8600`) -> Touch Bar needs only a driver; FDR only matters for Touch ID.
+- T1 in recovery (`1281`) -> nothing works until it is activated, Touch Bar included.
+
+### Routes to an activated T1
+
+1. **Restore your own `EFI/APPLE` backup** — the cheapest, if you have one from this exact
+   machine. See "Restore it" in Step 0.
+2. **Full macOS restore** (Step 0). Regenerates FDR from scratch. **Needs a working screen**
+   — Disk Utility and Setup Assistant cannot be driven blind, so on a machine with a dead
+   panel this route requires an external monitor first.
+3. **Linux-only activation, no macOS, no wipe** — generate this T1's FDRData and auth
+   ticket with a patched libimobiledevice stack, reset the T1, replay image + ticket, write
+   the proven files to the ESP. Multi-phase and fiddly, but **entirely command-line**, so it
+   works over SSH on a machine with no display.
+   See <https://gist.github.com/tigercosmos/ecbfe1fc20b7303c1808d3ab74af1f5b>.
+
+> FDR data is bound to **one physical T1**. One machine's backup can never activate another.
+
+### Drivers (once the T1 is activated)
+
+- **T1Bridge** — Touch Bar + Touch ID. **Not in the AUR** (`aur/rpc/v5/search/t1bridge`
+  returns 0 results, checked 2026-09-10); it ships as a signed pacman repo for Arch and
+  Omarchy, so that repo has to be added before Step 0's `pacman -S t1bridge …` will resolve.
+- **`t1-touchbar`** — DKMS driver, Touch Bar only, claims to build on kernel 7.x:
+  <https://github.com/AJ-dev-i60/t1-touchbar>
+- **Not `macbook12-spi-driver-dkms`** — its `apple-ibridge` is the old T1 Touch Bar route
+  and it does not build on kernel 7.x (step 2 removes it).
+
+> Everything in this section beyond the `05ac:` check is **community-sourced and unverified
+> here** — read, not run. Confirm against current sources before acting on it.
 
 ---
 
