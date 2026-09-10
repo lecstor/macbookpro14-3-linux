@@ -9,13 +9,14 @@
 
 ## Machine facts
 
-Two units. The left column is how the notes were first recorded (hostname `omarchy`); the
-right is machine B, read off the hardware on 2026-09-10. Everything that matters for the
-fixes is identical — same Baffin dGPU on the internal panel, same Wi-Fi, same audio codec.
+Two units, and they are **different models** — both read off their own hardware on
+2026-09-10. Everything that matters for the fixes is identical: same Baffin dGPU on the
+internal panel, same Wi-Fi, same audio codec. That two generations behave identically is
+why these notes should carry to any Touch Bar T1 Mac.
 
-| | first recorded (`omarchy`) | machine B (`headless`) |
+| | machine A (`omarchy`) | machine B (`headless`) |
 |---|---|---|
-| Model | MacBookPro14,3 (15", 2017, Touch Bar, T1) | **MacBookPro13,3** (15", 2016, Touch Bar, T1), board `Mac-A5C67F76ED83108C` |
+| Model | **MacBookPro14,3** (15", 2017, Touch Bar, T1), board `Mac-551B86E5744E2388` | **MacBookPro13,3** (15", 2016, Touch Bar, T1), board `Mac-A5C67F76ED83108C` |
 | Kernel | `7.2.3-arch1-3` (was `7.1.9.arch1-2` until 2026-09-10) | `7.2.3-arch1-3` |
 | systemd | `261.2-1` | `261.2-1` |
 | Root | LUKS, btrfs `@` subvol | LUKS, btrfs `@` subvol; 2 GB vfat ESP at `/boot` |
@@ -26,9 +27,10 @@ fixes is identical — same Baffin dGPU on the internal panel, same Wi-Fi, same 
 | dGPU PCI subsystem | `0x106b3900` | `0x106b0166` |
 | Network in service | — | USB CDC-NCM ethernet dongle `[0b95:1790]`, `cdc_ncm` |
 
-> The two model / subsystem rows disagree, so one column is mislabelled — see the
-> [README](README.md#which-unit-am-i-on). B is the verified one. It does not change any
-> step below: every fix here is generation-wide, not model-specific.
+> Earlier notes flagged these rows as a mislabelling. They are not: A really is a 2017
+> 14,3 and B a 2016 13,3, each confirmed from its own `/sys/class/dmi/id/`, and the
+> differing dGPU subsystems (`0x106b3900` vs `0x106b0166`) follow from that rather than
+> contradicting it. Both columns are correct.
 
 ---
 
@@ -184,8 +186,13 @@ done
 | `05ac:8600` | T1 activated and running its EmbeddedOS — a driver is all you need |
 | `05ac:1281` | `Apple Mobile Device (Recovery Mode)` — no working EmbeddedOS; a driver alone will do nothing |
 
-**B reads `05ac:1281`** (2026-09-10), because the Omarchy install wiped the ESP that held
-the T1's EmbeddedOS. Its FDR backup on the USB key is what would bring it back.
+**Both units read `05ac:1281`** (2026-09-10) — A as well as B — because each Omarchy
+install wiped the ESP that held the T1's EmbeddedOS. B's FDR backup on the USB key is what
+would bring B back; A has no backup and needs the full macOS restore.
+
+Practical consequence for A: its Touch Bar has never worked under Linux and no driver would
+have helped, which matches what the kernel sees — only `Apple SPI Keyboard` enumerates, with
+no Touch Bar device at all.
 
 ### Touch Bar is not Touch ID
 
