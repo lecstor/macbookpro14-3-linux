@@ -123,17 +123,93 @@ the note and a matching gotcha entry.
 The ACPI errors in the boot log (`AE_ALREADY_EXISTS` on SSDT loads, `\_SB.OSCP` not found)
 are ordinary Apple firmware noise on this generation, unrelated to the GPU work.
 
+## 5. The panel died (later the same day)
+
+About 15 minutes into the post-reboot session the screen blanked again and did not come
+back — the same failure as the earlier unit's boot -1 episode, but this time **with all
+three amdgpu params active**. The difference: SSH was up, so instead of a hard power-off,
+the machine was diagnosed live from machine A.
+
+First: SSH worked. `SSH_CONNECTION=<machine-a-ip> ... 22`, session resumed, machine up 15
+minutes with `ring gfx timeout` still at 0 — so the box was completely healthy underneath a
+dead display. That is precisely what the morning's work was for.
+
+**Auth landed on the wrong method.** `journalctl -u sshd` shows
+`Accepted password for lecstor` — not publickey. The GitHub-sourced key is not the one
+machine A holds, so the password fallback (deliberately left enabled) carried the login.
+
+### What the software reported while the screen showed nothing
+
+| layer | reported |
+|---|---|
+| Hyprland | `dpmsStatus: 1`, `disabled: false`, `2880x1800@60` active |
+| DRM | `card1-eDP-1`: `connected`, `enabled`, dpms `On` |
+| Backlight | `gmux_backlight: 253` — lit, matching "backlight on, no image" |
+| Kernel | zero amdgpu/drm messages in the preceding 15 minutes |
+
+### Recovery attempts, all failed
+
+- `hl.dsp.dpms("off")` then `("on")` — accepted, no effect, **amdgpu logged nothing**.
+- Full modeset: native -> `1280x800` -> native via `monitors.lua` + `hyprctl reload`.
+  Hyprland performed both changes (confirmed in `hyprctl monitors`); the panel stayed dark
+  and amdgpu again logged nothing.
+- Earlier the same session: `1920x1200` instead of native, to test whether the tear lines
+  were an eDP bandwidth problem. No change, so it is not bandwidth. Reverted.
+
+### Findings
+
+1. **PSR is exonerated.** The blank-on-wake recurred with `dcdebugmask=0x10` active. The
+   runbook's leading suspect for this exact symptom is wrong.
+2. **The kernel params fix no display symptom.** Shake unchanged, tear lines unchanged
+   (and they predate the params — the user confirmed the lines were the original fault, not
+   a regression from `dpm=0`), blank-on-wake recurred.
+3. **The driver has no idea anything is wrong**, which is why no software lever moves it.
+   Hardware, as the README always said.
+4. **The USB-C DisplayPort outputs enumerate normally** (`card1-DP-1` .. `DP-4`, all
+   `disconnected`). Untested, but the likely route to a screen if one is ever needed.
+
+## 6. Converted to a true headless box
+
+Decision: stop starting a graphical session at all.
+
+Discovered in the process that **Omarchy autologins through SDDM**, not a getty — PID 895
+`/usr/bin/sddm` -> `sddm-helper ... --autologin`. So `set-default multi-user.target` alone
+would not have stopped it, and terminating the session would just have triggered another
+autologin.
+
+```sh
+sudo systemctl set-default multi-user.target
+sudo systemctl disable --now sddm
+```
+
+Verified after: default target `multi-user.target`, `sddm` `disabled`/`inactive`, the tty1
+session gone from `loginctl list-sessions`, and the orphaned Claude process (PID 2498,
+stranded in a `foot` terminal on the dead screen) gone with it. `fbcon` remains bound to
+the panel — harmless.
+
+**`pkexec` stopped working at this point** and this is worth knowing in advance: polkit's
+authentication agent belonged to the graphical session. Over SSH, with no controlling
+terminal, `pkexec` fails outright and an agent session has *no* route to root — the `!`
+shell prefix fails the same way. Privileged work now needs
+`ssh -t <host> 'sudo ...'` from machine A. Both commands above were run by the user that
+way.
+
 ## Open items
 
 - [x] Reboot B — done, params active (see above).
-- [ ] **Watch for the shake and the blank-on-wake.** With the params now live, this is the
-      real test; success = 1–2 weeks of normal idle/wake cycles with neither. Note the
-      pre-reboot `power_dpm_force_performance_level=high` stopgap can no longer be used as
-      a comparison — `dpm=0` removed the knob.
-- [ ] Confirm key-based SSH from machine A, then set `PasswordAuthentication no` in
-      `/etc/ssh/sshd_config.d/10-headless.conf` and `systemctl reload sshd`.
+- [x] Watched for the shake and blank-on-wake: **both recurred**, params notwithstanding.
+      Panel abandoned; B is headless.
+- [ ] **Key auth.** Login is currently by password. Run `ssh-copy-id lecstor@<B>` from A,
+      confirm `Accepted publickey` in `journalctl -u sshd`, then set
+      `PasswordAuthentication no` in `/etc/ssh/sshd_config.d/10-headless.conf` and
+      `sudo systemctl reload sshd` (needs `ssh -t` — see the pkexec note above).
 - [ ] Consider an `ed25519` key for B rather than the existing 2048-bit RSA one.
 - [ ] Off-LAN access (Tailscale / WireGuard) if B needs to be reachable from outside the
       LAN. Not set up; the `ufw` rule is LAN-scoped on purpose.
+- [ ] **Reconsider the amdgpu params.** They fix no display symptom, and the display is now
+      unused. `dpm=0` and `aspm=0` are still plausibly holding off the random reboots, which
+      is the one symptom that would take the whole machine down — but that is unproven on
+      kernel 7.2.3. `dcdebugmask=0x10` (PSR) is pointless on a panel nobody looks at.
+- [ ] Test an external monitor on a USB-C DP output, if B ever needs a screen.
 - [ ] **Settle the A/B model question:** run `cat /sys/class/dmi/id/product_name` and
       `hostnamectl --static` on A and label the runbook's machine-facts columns for certain.

@@ -193,7 +193,7 @@ there is no Escape at all — only `Apple SPI Keyboard` appears to the kernel. R
 Hyprland (step 9). A T1 bridge would restore the real Touch Bar Escape at the cost of an
 extra DKMS module and a documented lid/suspend regression — not worth it.
 
-### 4. Random hard reboots + screen shake — *worked around with kernel params*
+### 4. Random hard reboots + screen shake — *reboots mitigated; display faults are terminal*
 
 The discrete **Radeon Pro 555 (POLARIS11)** drives the internal panel (`eDP-1` is on
 `card1` = amdgpu; `i915` has no connected outputs, so **amdgpu cannot be blacklisted** —
@@ -216,6 +216,49 @@ Two symptoms, same subsystem:
 > All observed crashes were on kernel **7.1.9**. The 2026-09-10 Omarchy update moved this
 > machine to **7.2.3**, which *may* have fixed the reboots on its own — not enough uptime
 > yet to know. The kernel params are a cheap safety net on top.
+
+#### What the params did and did not fix (measured 2026-09-10, machine B)
+
+The kernel params **did not fix any display symptom.** Everything below was measured with
+all three active and verified in `/proc/cmdline`:
+
+| symptom | outcome with the params |
+|---|---|
+| Random hard reboots | none since, but only hours of uptime on a new kernel — **unproven** |
+| Vertical shake | **unchanged** |
+| Horizontal tear lines through text | **unchanged** (and predates the params — not caused by them) |
+| Blank-on-wake, panel never returns | **recurred** |
+
+Two hypotheses died here:
+
+- **PSR is not the cause.** `amdgpu.dcdebugmask=0x10` disables Panel Self Refresh, and the
+  blank-on-wake happened anyway. The earlier notes listed PSR as the leading suspect for
+  exactly this symptom; it is not.
+- **It is not eDP link bandwidth.** Driving the panel at `1920x1200` and at `1280x800`
+  instead of the native `2880x1800` — a 2.25x and 5x cut in pixel clock — changed neither
+  the tear lines nor the shake.
+
+**What a blank panel looks like from the software side** (all of this while the user sees
+nothing at all):
+
+```sh
+hyprctl monitors                       # dpmsStatus: 1, disabled: false, mode active
+cat /sys/class/drm/card1-eDP-1/status  # connected
+cat /sys/class/drm/card1-eDP-1/dpms    # On
+cat /sys/class/backlight/gmux_backlight/brightness   # lit
+journalctl -k --since -15min | grep -iE 'amdgpu|drm'  # NOTHING
+```
+
+The driver believes it is scanning out to a healthy panel. Neither a DPMS off/on cycle nor
+a full modeset (native -> `1280x800` -> native) recovers the image, and amdgpu does not log
+a single line during either. Nothing in the stack knows anything is wrong, which is why
+nothing in the stack can fix it.
+
+**Conclusion: the panel and/or the GPU's display engine is failing in hardware.** The
+answer is not another parameter — it is to stop depending on the display (see
+[Headless duty](#headless-duty--remote-access)). The four USB-C DisplayPort outputs
+(`card1-DP-1` .. `DP-4`) are untested but enumerate normally; an external monitor is the
+remaining option if a screen is ever needed.
 
 ---
 
@@ -499,6 +542,34 @@ of the IP, which moves when the DHCP lease changes.
 ssh <user>@<hostname>.local
 ```
 
+### 6. When the panel is gone: run with no compositor
+
+Once the display is unusable, stop starting a graphical session at all. Nothing then drives
+the failing panel, and the machine is exactly what it is: an SSH box.
+
+**Omarchy autologins via SDDM, not a getty.** `systemctl get-default` returning
+`graphical.target` is only half of it — `sddm.service` is enabled separately, so changing
+the default target alone leaves SDDM starting the session, and simply terminating the
+session has SDDM autologin again immediately.
+
+```sh
+sudo systemctl set-default multi-user.target
+sudo systemctl disable --now sddm     # --now also kills the running session
+```
+
+`--now` terminates the graphical session and everything inside it — check for work running
+in a terminal on that session first (`ps -u $USER -o pid,tty,etime,args`). Run it from an
+SSH session, never from a terminal hosted inside the session you are about to kill.
+
+Reverse it if an external monitor is ever plugged into one of the USB-C DP outputs:
+
+```sh
+sudo systemctl set-default graphical.target && sudo systemctl enable --now sddm
+```
+
+The text console framebuffer (`fbcon`) stays bound to the dead panel afterwards. It is
+harmless — a text console nobody reads.
+
 ### Verify
 
 | command (from the *other* machine) | pass condition |
@@ -547,6 +618,31 @@ in-kernel `applespi` covers keyboard + touchpad.
 
 **GPU stuck at max clock while idle / screen shaking.** amdgpu DPM misbehaving. Stopgap:
 force `power_dpm_force_performance_level` to `high`. Durable: step 8 kernel params.
+
+**`pkexec` works, then stops working after you go headless.** polkit needs an
+authentication agent, and on a desktop that agent belongs to the graphical session. Once
+the compositor is gone — or when you connect over SSH — `pkexec` fails with
+`Error creating textual authentication agent: ... /dev/tty: No such device or address`.
+An agent session (Claude Code, a script, anything without a controlling terminal) then has
+**no route to root at all**, including via the `!` shell prefix. The fix is a real TTY from
+the other machine:
+
+```sh
+ssh -t <user>@<host> 'sudo systemctl ...'     # -t forces TTY allocation so sudo can prompt
+```
+
+Plan privileged work accordingly: do it while the desktop is still up, or over `ssh -t`.
+
+**`hyprctl keyword ...` -> `keyword can't work with non-legacy parsers. Use eval.`**
+Omarchy configures Hyprland in Lua, so the legacy `keyword` command is rejected and
+dispatchers live under `hl.dsp.*`:
+
+```sh
+hyprctl dispatch 'hl.dsp.dpms("off")'         # not: hyprctl dispatch dpms off
+```
+
+For monitor changes, edit `~/.config/hypr/monitors.lua` and `hyprctl reload` — that path
+works and is the one the omarchy skill prescribes.
 
 **`power_dpm_force_performance_level: No such file or directory`.** Not a wrong card number
 — you are already booted with `amdgpu.dpm=0`, which removes every DPM sysfs knob. Nothing

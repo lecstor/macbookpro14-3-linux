@@ -18,10 +18,14 @@ Machine-specific identifiers (UUIDs, IP addresses, keys) are redacted to placeho
 
 - **Machine A** — healthy. Daily driver, hostname `omarchy`. Screen and GPU stable.
 - **Machine B** — **MacBookPro13,3**, hostname `headless`. Failing display / discrete GPU:
-  random hard reboots, vertical screen shake, and a blank-screen episode. The same fault
-  appears during a macOS install, so it is **hardware**, not a driver bug. Retired to
-  headless duty (see [Headless duty](rebuild-runbook.md#headless-duty--remote-access)) —
-  reachable over SSH, so the panel can fail without taking the machine with it.
+  random hard reboots, vertical screen shake, horizontal tear lines through text, and
+  repeated blank-screen episodes. The same fault appears during a macOS install, so it is
+  **hardware**, not a driver bug.
+  **As of 2026-09-10 the internal panel is considered dead** and B runs with no compositor
+  at all — `multi-user.target`, `sddm` disabled, reached over SSH. See
+  [Headless duty](rebuild-runbook.md#headless-duty--remote-access). Every software
+  mitigation was tried and none worked; the four USB-C DisplayPort outputs are untested but
+  present, so an external monitor is the remaining option if B ever needs a screen.
 
 ### Which unit am I on?
 
@@ -61,7 +65,8 @@ they cost fixed GPU clocks and extra heat for nothing.
 | Escape key | ✓ remapped | Hyprland `SUPER+TAB` → Escape |
 | Speakers | ✓ work via generic HDA | — |
 | Keyboard / touchpad | ✓ in-kernel `applespi` | (do **not** install `macbook12-spi-driver-dkms` — breaks on kernel 7.x) |
-| Random hard reboots + screen shake | ⚠ **machine B only** — mitigated, observing | `amdgpu.dpm=0 amdgpu.aspm=0 amdgpu.dcdebugmask=0x10` |
+| Random hard reboots | ⚠ **machine B only** — no recurrence since kernel 7.2.3, unproven | `amdgpu.dpm=0 amdgpu.aspm=0` |
+| Screen shake / tear lines / blank-on-wake | ✗ **machine B only** — **unfixable in software**, panel abandoned | run headless (`sddm` disabled) |
 | Touch ID | ✗ needs original `EFI/APPLE` FDR data | back it up from macOS **before** wiping (runbook Step 0) |
 | Lid close suspends a headless box | ✓ fixed | `logind.conf.d` `HandleLidSwitch=ignore` |
 | Reaching B once its panel fails | ✓ fixed | SSH + key + LAN-scoped `ufw` rule (runbook, Headless duty) |
