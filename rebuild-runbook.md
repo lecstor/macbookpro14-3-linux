@@ -56,21 +56,21 @@ re-paired even by reinstalling macOS.
 > LUKS/btrfs root, no macOS partition, no `EFI/APPLE` (`/boot/EFI` holds only `BOOT`,
 > `limine` and `Linux`).
 >
-> **On B this does not mean the restore never happened — it did.** B went through the full
-> macOS restore, its `EFI/APPLE` was backed up to a USB key, and the subsequent Omarchy
-> install then rewrote the ESP and took `EFI/APPLE` with it. The backup is the surviving
-> copy. **An empty ESP tells you what touched the disk last, not whether a restore ever
-> happened** — do not infer one from the other.
+> **On B this does not mean nothing happened — macOS was installed.** Its `EFI/APPLE` was
+> backed up to a USB key, and the subsequent Omarchy install then rewrote the ESP and took
+> `EFI/APPLE` with it. The backup is the surviving copy. **An empty ESP tells you what
+> touched the disk last, not what happened before** — do not infer one from the other.
+> (What it does *not* prove is a completed first boot; see the Setup Assistant check below.)
 >
 > A visible consequence: with no EmbeddedOS on the ESP, B's T1 falls back to recovery mode
 > and enumerates as USB `05ac:1281` instead of an activated `05ac:8600`. See
 > [Touch Bar and the T1's state](#touch-bar-and-the-t1s-state).
 >
-> **A has since had its own restore — done 2026-09-10.** The line that used to sit here
-> ("A still needs its own restore") is obsolete. A went through the full macOS restore and
-> its `EFI/APPLE` was backed up at 15:56 that day; the Omarchy install that followed booted
-> at 16:13 and took the ESP with it, exactly as on B. **Both units' backups now sit on the
-> one USB key**, as sibling directories:
+> **A had a macOS install of its own on 2026-09-10.** The line that used to sit here ("A
+> still needs its own restore") is obsolete. macOS was installed and A's `EFI/APPLE` backed
+> up at 15:56 that day; the Omarchy install that followed booted at 16:13 and took the ESP
+> with it, exactly as on B. **Both units' backups now sit on the one USB key**, as sibling
+> directories:
 >
 > ```
 > mbp143-A-efi-backup-2026-09-10/   FIRMWARE/MBP143.fd   EMBEDDEDOS/FDRData (209,888 B)
@@ -81,7 +81,63 @@ re-paired even by reinstalling macOS.
 > directory names are trustworthy. A second copy of A's lives on A at `~/t1-backup/`.
 > FDR data is still bound to one physical T1: **do not cross them.**
 
+### ⛔ Check this FIRST: did Setup Assistant actually finish?
+
+**A backup is only worth taking if the macOS first boot completed.** This is the single
+thing that determines whether Touch ID can ever work, and it is easy to get wrong because
+the disk looks identical either way: macOS installs, an APFS volume group appears, and you
+can reach a Recovery Terminal to copy `EFI/APPLE` — all without the T1 ever activating.
+
+> Setup Assistant must reach a **Finder desktop**. Short of that the T1 **never writes
+> activated FDR state**, so the `EFI/APPLE` backup you take is a snapshot of a
+> *never-activated* T1. Restoring one cannot activate anything, because there is nothing
+> activated in it to restore.
+
+**Both units here are in exactly that state** — the backups on the USB key were taken from
+T1s that never activated, which is why every attempt to replay them failed. If a first boot
+cannot be completed on a given machine for any reason, the macOS route is simply unavailable
+on it; skip to [route 3](#routes-to-an-activated-t1).
+
+Confirmed by the T1's own boot logs in both backups — `LOG/BOOT-*.LOG`, decoded 2026-09-10.
+**Every retained boot on both machines is a Recovery boot; not one full macOS boot:**
+
+| unit | log | time (UTC) | boot type |
+|---|---|---|---|
+| A | BOOT-4 | 05:34 | `Network recovery selected` (Internet Recovery) |
+| A | BOOT-3 | 05:44 | `Network recovery selected` |
+| A | BOOT-2 | 05:47 | `Local recovery selected` |
+| A | BOOT-1 | 05:52 | `Local recovery selected` → `Booting Recovery OS.` |
+| B | BOOT-2 | 01:21 | `Local recovery selected` → `Booting Recovery OS.` |
+| B | BOOT-1 | 01:33 | `Local recovery selected` → `Booting Recovery OS.` |
+
+A's backup was taken at 05:56 UTC, four minutes after that last Recovery boot. macOS *was*
+installed — a full APFS volume group exists (`Preboot`, `Recovery`, `Update`, `VM`, plus the
+data volume) — it just never completed a first boot. Caveat: the T1 keeps only 4 rotating
+logs (A) / 2 (B),
+so an earlier full boot could have aged out; but the same pattern appears independently on
+both units, and A's four logs cover the 18 minutes right before the backup with 10/3/5-minute
+gaps — too short for a Setup Assistant run.
+
+**How to read a `BOOT-*.LOG`** (they are plain text with binary framing):
+
+```sh
+strings LOG/BOOT-1.LOG | grep -E '^#\[LOG:|SSR\||Booting'
+# "#[SSR|>] Local recovery selected." + "Booting Recovery OS." = a Recovery boot.
+# A real first boot shows neither.
+```
+
+**If a first boot can be completed**, do that — it is the cheap route and regenerates real
+activated FDR data. See the next section.
+
+**If it cannot**, skip the macOS route entirely and go to
+[route 3](#routes-to-an-activated-t1): the Linux-only activation never touches macOS at all,
+so nothing that gates macOS setup gates it either. Plan on its **Pass A** (generate FDRData
+from scratch) rather than the Pass-B shortcut — the FDRData in these backups is not
+activated material.
+
 ### Regenerate it — reinstall macOS from scratch
+
+> Only viable if the first boot can actually be completed — see the section directly above.
 
 1. **Internet Recovery:** power on and hold **Cmd + Option + R** at the chime until a
    spinning globe appears (this pulls the latest macOS the machine supports; there is no

@@ -73,7 +73,7 @@ they cost fixed GPU clocks and extra heat for nothing.
 | Keyboard / touchpad | ✓ in-kernel `applespi` | (do **not** install `macbook12-spi-driver-dkms` — breaks on kernel 7.x) |
 | Random hard reboots | ⚠ **machine B only** — no recurrence since kernel 7.2.3, unproven | `amdgpu.dpm=0 amdgpu.aspm=0` |
 | Screen shake / tear lines / blank-on-wake | ✗ **machine B only** — **unfixable in software**, panel abandoned | run headless (`sddm` disabled) |
-| Touch ID / Touch Bar | ✗ T1 stuck in recovery (`05ac:1281`) on both units; FDR data **is** backed up for both | ESP restore + cold boots + SMC reset all **failed** on A — needs the Linux-only USB activation (runbook, "Routes to an activated T1" route 3) |
+| Touch ID / Touch Bar | ✗ T1 stuck in recovery (`05ac:1281`) on both units — **root cause: neither ever completed a macOS first boot**, so the T1 never activated and the backed-up FDR data is a never-activated snapshot | a completed macOS first boot regenerates real FDR data; failing that, the Linux-only USB activation (runbook route 3, Pass A) |
 | T1Bridge stack | ✓ installed & verified on A (`0.1.7-1`) | signed `[standardagents]` repo; waiting on an activated T1 to do anything |
 | Lid close suspends a headless box | ✓ fixed | `logind.conf.d` `HandleLidSwitch=ignore` |
 | Reaching B once its panel fails | ✓ fixed | SSH + key + LAN-scoped `ufw` rule (runbook, Headless duty) |
