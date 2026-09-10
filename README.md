@@ -1,31 +1,54 @@
 # macbookpro14-3-linux
 
-Notes for running Linux ([Omarchy](https://omarchy.org/) / Arch + Hyprland) on
-**MacBookPro14,3** (15", 2017, Touch Bar, T1). Three pieces of hardware don't work out of
-the box — Wi-Fi, the internal microphone, and the Escape key — and each fails in a way that
-looks like something else. This is what they actually are, and the order to fix them in.
+Notes for running Linux ([Omarchy](https://omarchy.org/) / Arch + Hyprland) on the 15"
+Touch Bar MacBook Pro — **MacBookPro13,3** (2016) and **MacBookPro14,3** (2017), both T1.
+Three pieces of hardware don't work out of the box — Wi-Fi, the internal microphone, and
+the Escape key — and each fails in a way that looks like something else. This is what they
+actually are, and the order to fix them in.
 
-Written from two units of the same model, so some of it is panel-and-GPU lottery rather
-than universal. Machine-specific identifiers are redacted to placeholders.
+Written from two units, so some of it is panel-and-GPU lottery rather than universal. The
+two share a hardware generation — Baffin/POLARIS11 dGPU `[1002:67ef]` driving the internal
+panel, BCM43602 Wi-Fi, Cirrus CS8409 audio — so the findings carry across both models.
+Machine-specific identifiers (UUIDs, IP addresses, keys) are redacted to placeholders —
+**this repo is public.**
+
+> The repo is named for the 14,3 because that is the unit it started on. It covers both.
 
 ## Two machines, A and B
 
-These notes come from two units of the same model, distinguished by condition rather than
-by any identifier — identifiers change every reinstall, symptoms don't:
+- **Machine A** — healthy. Daily driver, hostname `omarchy`. Screen and GPU stable.
+- **Machine B** — **MacBookPro13,3**, hostname `headless`. Failing display / discrete GPU:
+  random hard reboots, vertical screen shake, and a blank-screen episode. The same fault
+  appears during a macOS install, so it is **hardware**, not a driver bug. Retired to
+  headless duty (see [Headless duty](rebuild-runbook.md#headless-duty--remote-access)) —
+  reachable over SSH, so the panel can fail without taking the machine with it.
 
-- **Machine A** — healthy. Daily driver. Screen and GPU stable.
-- **Machine B** — failing display / discrete GPU: random hard reboots, vertical screen
-  shake, and a blank-screen episode. The same fault appears during a macOS install, so it
-  is **hardware**, not a driver bug. Retired to headless duty.
+### Which unit am I on?
 
-If you are unsure which you are on, ask the journal:
+Ask DMI. It is the only answer that survives a reinstall:
+
+```sh
+cat /sys/class/dmi/id/product_name        # MacBookPro13,3 = B
+hostnamectl --static                      # headless = B
+```
+
+Do **not** use the crash history to decide:
 
 ```sh
 journalctl -k --no-pager | grep -c 'ring gfx timeout'   # 0 on a healthy unit
 ```
 
+That returns `0` on a freshly reinstalled B as well — the journal only knows about the
+current install. It tells you whether *this install* has crashed, not which unit you are on.
+
+> **Unresolved:** B is `MacBookPro13,3` with dGPU PCI subsystem `0x106b0166` (verified from
+> DMI, 2026-09-10). The runbook's original machine-facts column records `MacBookPro14,3`
+> and subsystem `0x106b3900`. Both cannot describe the same unit, and A has not been
+> checked since. Next time you are on A, run the two commands above and label that column
+> for certain.
+
 **Scope of the findings:** the Wi-Fi, microphone, Escape-key and Touch ID gaps are
-**model-wide** — they apply to any MacBookPro14,3. The amdgpu instability and its kernel
+**generation-wide** — they apply to both models. The amdgpu instability and its kernel
 params are **B-only**, one unit's dying GPU; don't apply them to a healthy machine, where
 they cost fixed GPU clocks and extra heat for nothing.
 
@@ -40,6 +63,8 @@ they cost fixed GPU clocks and extra heat for nothing.
 | Keyboard / touchpad | ✓ in-kernel `applespi` | (do **not** install `macbook12-spi-driver-dkms` — breaks on kernel 7.x) |
 | Random hard reboots + screen shake | ⚠ **machine B only** — mitigated, observing | `amdgpu.dpm=0 amdgpu.aspm=0 amdgpu.dcdebugmask=0x10` |
 | Touch ID | ✗ needs original `EFI/APPLE` FDR data | back it up from macOS **before** wiping (runbook Step 0) |
+| Lid close suspends a headless box | ✓ fixed | `logind.conf.d` `HandleLidSwitch=ignore` |
+| Reaching B once its panel fails | ✓ fixed | SSH + key + LAN-scoped `ufw` rule (runbook, Headless duty) |
 
 ## Conventions
 
