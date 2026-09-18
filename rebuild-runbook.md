@@ -327,6 +327,127 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
    works over SSH on a machine with no display.
    See <https://gist.github.com/tigercosmos/ecbfe1fc20b7303c1808d3ab74af1f5b>.
 
+> ### 2026-09-16 — t1-revive regeneration run (machine A): restore works, two faults remain
+>
+> Tool: [t1-revive](https://github.com/niconistal/t1-revive) `0.1.1`, cloned to
+> `~/t1-revive`, private stack built with `bash build.sh` (nothing system-wide).
+> This is the packaged successor to the gist route above, and its patch contains the
+> piece our 2026-09-10 attempt was missing: `FDRMemoryStorePath`, without which
+> device-side `restored` cannot persist FDR and `fdr_recover` fails with error 52.
+>
+> Full chain completed with zero reboots (timings from the log):
+> `provision 133 s → reset-1 → personalize 103 s → reset-2 → boot 39 s → stage
+> (three `verified` lines) → handover`, 334 s total. Image `30667180` bytes
+> (matches the reference size exactly); fresh `FDRData` `152814` bytes (the old
+> never-activated FDR was `209888`). Old ESP files auto-backed-up to
+> `private/esp-backup-<stamp>/`. T1 stable at `05ac:8600`, HID + UVC camera + NCM
+> all bind. t1bridge upgraded `0.1.7 → 0.1.9` via `omarchy update` beforehand.
+>
+> Two faults remain, both filed upstream with redacted evidence (no identifiers):
+>
+> 1. **Cold boot ignores the verified ESP** ([t1-revive#7](https://github.com/niconistal/t1-revive/issues/7)).
+>    Full shutdown + 20 s wait + power on returns the T1 to `05ac:1281` although
+>    the staged set is the same pair that boots fine over USB.
+> 2. **Display endpoint silent** ([t1bridge#31](https://github.com/standardagents/t1bridge/issues/31)).
+>    `appletbdrm` fails `get display information` with `-110` on every probe
+>    (boot, post-handover, manual re-probe on a settled bus), so `drm:
+>    unavailable`, `touchbar: not-ready`, bar never lit. HID/UVC/NCM unaffected.
+>
+> Live workaround until (1) resolves: after any power-off, `cd ~/t1-revive &&
+> sudo bin/t1-revive regenerate --from boot` (~65 s) restores the live `8600`
+> from the captured pair — no reprovisioning needed. A warm reboot preserves the
+> booted T1; only full power loss drops it.
+>
+> Gotchas learned: never run `omarchy setup security fingerprint` — it does not
+> recognise the T1 and would install stock `libfprint`/`fprintd` over t1bridge's
+> matched pair (apply the PAM lines by hand instead); the user-space renderer
+> (`t1-touchbar.service`) needs a logout/login after joining the `t1bridge`
+> group; a first `fprintd-enroll` may fail while the keybag bootstraps — confirm
+> `keybag: ready` and retry once before assuming a real fault.
+>
+> #### 2026-09-18 follow-up: 0.1.2, the strip test, and a confound
+>
+> Upgraded to t1-revive `0.1.2` (`git pull` fast-forward; no vendor changes so no
+> `build.sh` needed). 0.1.2 fixes a real tool bug we had reported as evidence:
+> `kernel-match: no` was the report reading the stock `linux` package instead of
+> the running `linux-omarchy`; it now reads `kernel-match: yes`. It also adds
+> `esp[n].removable` and fixes the doubled diagnostic lines (#6).
+>
+> Maintainer's reply on #7 reframed the two faults as possibly **one defect**: the
+> `boot` step only proves the T1 enumerated `8600` and held 30 s — not that its
+> EmbeddedOS finished starting. Given `drm: unavailable`, the T1 may boot the image
+> and fail later in its own startup, so a cold boot ends the same way and falls
+> back to recovery. Their proposed discriminator is physical: watch the strip at
+> power-on (it lights during the T1's own firmware phase on a healthy machine).
+>
+> Test run (USB stick unplugged, full shutdown, dim room, no light at power-on,
+> landed `1281`). **The strip is a confounded indicator on this unit**: it is also
+> dark on a *successful* USB boot (`8600`, HID/UVC/NCM up) because of the `-110`,
+> so "no light" cannot separate "firmware never tried" from "T1 booted and display
+> init failed". The ESP's `LOG/BOOT-*.LOG` (restored from the pre-Linux backup) is
+> untouched — only `BOOT-1..4`, mtime = the Sep 10 copy — so no boot log was
+> written by any cold boot since; weak evidence, since it is unknown whether a T1
+> EmbeddedOS boot writes them. Reported all of this back on #7.
+>
+> Answered the maintainer's provenance question: the pre-existing `209888`-byte
+> `FDRData` is this machine's own never-activated snapshot (macOS install, ESP
+> backed up, Omarchy wipe, copy-back), so **this ESP has never once had the T1
+> load anything from it**.
+>
+> Related t1bridge threads, distinct from our #31: **#34** — dark bar despite
+> `drm: ready` + display byte `AWAKE`, concluded an unobservable T1 state with no
+> host-side fix; **#35** — `t1-touchbar.service` starts before
+> `graphical-session.target` with a bare user environment (a genuinely fixable
+> ordering defect).
+>
+> Reading issue replies: the rendered GitHub page can omit comments; use
+> `gh issue view N -R <owner>/<repo> --comments`.
+
+> ### 2026-09-18 — Touch ID working on machine A (Touch Bar still dark)
+>
+> After the T1 was regenerated and handed to t1bridge `0.1.9`, Touch ID was set up
+> and verified. The dark bar (`appletbdrm` `-110`) does **not** block Touch ID —
+> separate path entirely.
+>
+> Steps that worked, in order:
+>
+> 1. T1 live: `cd ~/t1-revive && sudo bin/t1-revive regenerate --from boot`.
+> 2. `sudo systemctl reset-failed t1bridge-keybag.service t1-touchid-auth.service t1-touchbar-hw.service`.
+> 3. xART firewall, scoped to the T1 link only (`ncm` was `eth0`):
+>    `sudo ufw allow in on eth0 proto tcp from fe80::/10 to any port 61500 comment 't1bridge xART (T1 link only)'`.
+> 4. Import this Mac's Apple data. **The sandboxed `t1bridge-import.service`
+>    failed with exit 30, `private import temporary file could not be created`,
+>    even with the `WorkingDirectory=/var/lib/t1bridge/machine-data` drop-in that
+>    fixed it for the 13,3 reporter.** The destination was fine (root:root `0700`,
+>    writable, no stale temp). The non-sandboxed explicit path worked:
+>    `sudo t1bridge machine-data import --from /boot` → exit 0,
+>    `calibration.fscl` (57991 bytes) committed.
+> 5. Enroll as the normal user in the graphical session:
+>    `fprintd-enroll -f right-index-finger`. **The first attempt failed with
+>    `enroll-unknown-error`**; the broker journal showed
+>    `t1bridge keybag: prepare device keybag failed` (keybag still bootstrapping).
+>    Per `docs/omarchy.md`: `sudo systemctl restart t1-touchid-auth.service`, then
+>    enroll again → six `enroll-stage-passed` → `enroll-completed`,
+>    `keybag: ready`. `fprintd-verify -f right-index-finger` → `verify-match`;
+>    another finger → `verify-no-match`. Reported on t1bridge#29, which had asked
+>    whether from-scratch regenerated data was the cause — it is not.
+> 6. PAM wiring by hand (never `omarchy setup security fingerprint` — it would
+>    replace the matched libfprint/fprintd pair). `/etc/pam.d/sudo` and
+>    `/etc/pam.d/polkit-1` get, above the password stack, the clamshell gate
+>    `pam_exec.so quiet /usr/bin/omarchy-hw-laptop-closed` (`[success=1
+>    default=ignore]`) then `sufficient pam_fprintd.so`; the lock screen gets
+>    `/etc/pam.d/omarchy-lock-fingerprint` (`required pam_fprintd.so`). Omarchy
+>    4.0.x's lock screen only offers the fingerprint path when that file exists
+>    and a finger is enrolled.
+>
+> Verified both ways: touch succeeds; password fallback works when the prompt is
+> cancelled (Ctrl+C) and when it times out (~30 s). Keep a second root shell open
+> while editing PAM.
+>
+> Machine A now has: regenerated T1, stable `8600` over USB, Touch ID enrolled and
+> verified, sudo/polkit/lock-screen auth by touch. Still missing: the Touch Bar
+> display (`appletbdrm -110`) and cold-boot loading of the ESP.
+
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
 ### Drivers (once the T1 is activated)
@@ -1075,6 +1196,17 @@ Headless section (machine B, 2026-09-10): `openssh 10.5p1-1` · `ufw 0.36.2-7` �
 
 Apps and tooling (machine A, 2026-09-11): `@opencode/cli 0.0.0-beta-19425` ·
 mise `2026.9.4` · node `26.8.1` · npm `11.19.0`
+
+T1 regeneration (machine A, 2026-09-16/17): t1-revive `0.1.1` (repo at
+`~/t1-revive`, private `./prefix` build), upgraded to `0.1.2` on 2026-09-18 ·
+`t1bridge 0.1.9-1` ·
+`t1bridge-dkms 0.1.9-1` · `libfprint-t1bridge 1.94.100-17` ·
+`fprintd-t1bridge 1.94.5-14` · `acpi_call-dkms 1.2.2-3` · running kernel
+`7.2.5-3-omarchy` (kernel-pkg `7.2.3-arch1-3`). Working: full regenerate chain,
+stable `05ac:8600` with HID/UVC/NCM, **Touch ID enrolled + verified** (2026-09-18;
+sudo/polkit/lock-screen by touch, password fallback intact). Not working:
+cold-boot loading of the ESP (t1-revive#7), T1 display endpoint (t1bridge#31,
+`appletbdrm -110`).
 
 The Wi-Fi and audio findings are hardware-generation limits and will outlive these package
 versions; the exact commands may not.
