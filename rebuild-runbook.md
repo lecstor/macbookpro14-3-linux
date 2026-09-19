@@ -448,6 +448,31 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > verified, sudo/polkit/lock-screen auth by touch. Still missing: the Touch Bar
 > display (`appletbdrm -110`) and cold-boot loading of the ESP.
 
+> ### 2026-09-20 — macOS Recovery test: machine A's Touch Bar panel is dead
+>
+> The t1-revive maintainer's remaining test: boot Apple's own Recovery to see
+> whether the T1/panel emits with no Linux involved. Run as `⌘⌥R` Internet
+> Recovery (this unit has no macOS), watching the strip from power-on: ~4 minutes
+> to the Recovery environment, then language selection, then the Recovery menu.
+> **The Touch Bar stayed dark the entire time** — no firmware-phase light, no
+> controls, not a flash.
+>
+> Reading (their table): the fault is this machine's, not the stack's — it
+> predates t1-revive, and nothing t1-revive stages or any driver could change it.
+> So the `appletbdrm -110` is not a Linux driver artefact: Apple's firmware→T1
+> display path sees the same dead display. **The Touch Bar on machine A is a
+> hardware dead end**; Touch ID is unaffected (Secure Enclave path).
+>
+> Two maintainer clarifications also landed: the ESP's `LOG/BOOT-*.LOG` is not a
+> signal (a working 14,3 has no `LOG/` at all — ours is a macOS-era leftover), and
+> the kernel cannot distinguish "firmware never tried" from "tried and failed"
+> because the T1's first enumeration is already `8600` before USB comes up.
+> t1-revive#7 stays open as a firmware-side question; t1bridge#31 now carries the
+> Recovery evidence.
+>
+> After Recovery the T1 is back at `1281` (power cycle) — restore the live state
+> with `sudo bin/t1-revive regenerate --from boot`. Touch ID enrolment persists.
+
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
 ### Drivers (once the T1 is activated)
