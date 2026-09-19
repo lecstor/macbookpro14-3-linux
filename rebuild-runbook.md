@@ -472,6 +472,12 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 >
 > After Recovery the T1 is back at `1281` (power cycle) — restore the live state
 > with `sudo bin/t1-revive regenerate --from boot`. Touch ID enrolment persists.
+>
+> Helper installed: `~/.local/bin/t1-up` (on PATH, so it works from any
+> directory). `t1-up` checks the USB state and, only if the T1 is down, runs the
+> `boot` step (sudo for the device step only) and prints the USB/t1bridge state;
+> `t1-up --status` is read-only. Override the clone location with
+> `T1R_ROOT=/path` if it is not `~/t1-revive`.
 
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
