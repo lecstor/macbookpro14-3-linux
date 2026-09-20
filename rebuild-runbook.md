@@ -463,6 +463,13 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > display path sees the same dead display. **The Touch Bar on machine A is a
 > hardware dead end**; Touch ID is unaffected (Secure Enclave path).
 >
+> Context that sharpens this: the unit was in storage for many years —
+> essentially since 2019 — and is only now being revived. So the owner's "no
+> Touch Bar issues, I'd have noticed" recollection is about pre-2019 work use,
+> and the panel then sat unpowered for ~6–7 years. Age/storage degradation is a
+> plausible contributor to a panel that worked then and is dark now, making the
+> hardware reading more likely than a firmware one, not less.
+>
 > Two maintainer clarifications also landed: the ESP's `LOG/BOOT-*.LOG` is not a
 > signal (a working 14,3 has no `LOG/` at all — ours is a macOS-era leftover), and
 > the kernel cannot distinguish "firmware never tried" from "tried and failed"
