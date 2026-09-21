@@ -563,6 +563,22 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > To re-enable later: restore the filename, and confirm the lock screen backs off
 > on failure first — track the fix PRs above.
 
+> ### 2026-09-22 — t1bridge#29 resolved (empty auto-import, not regenerated data); v0.1.12 available
+>
+> The reporter on t1bridge#29 confirmed the conclusion recorded here on 2026-09-18:
+> on the 13,3 the **automatic import had left `machine-data` empty** (total 0), and
+> `sudo t1bridge --diagnostics machine-data import --from /boot` (all phases ok)
+> plus a `t1-touchid-auth.service` restart and one ordinary retry produced
+> `enroll-completed`, `keybag: ready` and `verify-match`. Regenerated data was not
+> the cause.
+>
+> Upstream housekeeping: the importer bug we reported (t1bridge#36,
+> `t1bridge-import.service` exit 30) is **closed**, fixed by PR #37 (merged
+> 2026-09-20); the stage-by-stage enrollment diagnostic procedure is in PR #39 /
+> `docs/diagnostics.md`. **v0.1.12** (pre-release, 2026-09-20) is available and adds
+> `sudo t1bridge machine-data recover --online`; it is not an enrollment fix. We
+> remain on `0.1.11-1`.
+
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
 ### Drivers (once the T1 is activated)
