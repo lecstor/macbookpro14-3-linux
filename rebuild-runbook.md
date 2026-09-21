@@ -448,10 +448,12 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > fingerprint path whenever `/etc/pam.d/omarchy-lock-fingerprint` exists. On this
 > Omarchy build that path retries with no backoff and can wedge the T1 keybag
 > relay — see the 2026-09-21 entry below. That file is deliberately left renamed
-> to `.disabled`; only restore it if the lock-screen retry behaviour is fixed.
+> to `.disabled`; only restore it if the lock-screen retry behaviour is fixed
+> (upstream: omarchy#9905 and the fix PRs listed in that entry).
 >
 > Machine A now has: regenerated T1, stable `8600` over USB, Touch ID enrolled and
-> verified, sudo/polkit/lock-screen auth by touch. Still missing: the Touch Bar
+> verified, sudo/polkit auth by touch (lock-screen fingerprint later disabled —
+> see 2026-09-21). Still missing: the Touch Bar
 > display (`appletbdrm -110`) and cold-boot loading of the ESP.
 
 > ### 2026-09-20 — macOS Recovery test: machine A's Touch Bar panel is dead
@@ -544,10 +546,22 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > `0x0d`/`0x04`/`0x23`/`0x18`/`0x19` replies. **While the lock-screen fingerprint
 > path stays enabled, expect the storm to re-wedge it — until the Omarchy
 > lock-screen retry behaviour is fixed, leave that PAM file disabled.** Reported
-> on t1bridge#14; the storm may also belong in Omarchy (cf. omarchy#11273).
+> on t1bridge#14.
+>
+> **Upstream outcome (2026-09-21):** the 250 ms lock-screen loop is already well
+> tracked in Omarchy's tracker, so a new issue would have been a duplicate. The
+> canonical open issue is **omarchy#9905** (the bot independently confirmed the
+> code path in source); #7176, #9648, #12509 and #9913 report the same loop, and
+> the open fix PRs are #11273 (2 s→30 s backoff plus suspend-while-blanked),
+> #10393, #11918, #12544 and #12420 — password fallback stays intact in each.
+> Instead of filing, the missing **T1/SEP-keybag consequence** was added to the
+> canonical thread:
+> <https://github.com/omacom/omarchy/issues/9905#issuecomment-5756779627>
+> (note `basecamp/omarchy` now redirects to `omacom/omarchy`). **No new issue
+> filed.**
 >
 > To re-enable later: restore the filename, and confirm the lock screen backs off
-> on failure first.
+> on failure first — track the fix PRs above.
 
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
@@ -1305,7 +1319,8 @@ T1 regeneration (machine A, 2026-09-16/17): t1-revive `0.1.1` (repo at
 `fprintd-t1bridge 1.94.5-14` · `acpi_call-dkms 1.2.2-3` · running kernel
 `7.2.5-3-omarchy` (kernel-pkg `7.2.3-arch1-3`). Working: full regenerate chain,
 stable `05ac:8600` with HID/UVC/NCM, **Touch ID enrolled + verified** (2026-09-18;
-sudo/polkit/lock-screen by touch, password fallback intact). Not working:
+sudo/polkit by touch, password fallback intact). Lock-screen fingerprint since
+disabled (omarchy#9905 — see 2026-09-21). Not working:
 cold-boot loading of the ESP (t1-revive#7), T1 display endpoint (t1bridge#31,
 `appletbdrm -110`).
 

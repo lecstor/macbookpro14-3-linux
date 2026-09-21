@@ -73,8 +73,8 @@ they cost fixed GPU clocks and extra heat for nothing.
 | Keyboard / touchpad | ✓ in-kernel `applespi` | (do **not** install `macbook12-spi-driver-dkms` — breaks on kernel 7.x) |
 | Random hard reboots | ⚠ **machine B only** — no recurrence since kernel 7.2.3, unproven | `amdgpu.dpm=0 amdgpu.aspm=0` |
 | Screen shake / tear lines / blank-on-wake | ✗ **machine B only** — **unfixable in software**, panel abandoned | run headless (`sddm` disabled) |
-| Touch ID / Touch Bar | ⚠ A: **Touch ID enrolled + verified working** (`right-index-finger`; sudo, polkit and lock screen by touch, password fallback intact). **Touch Bar is hardware-dead on A** — dark even under Apple's own Internet Recovery (2026-09-20), so no stack or driver will light it. Cold boot still drops to `05ac:1281`. B: still `05ac:1281` | runbook route 3, 2026-09-18 / 2026-09-20 entries; upstream t1bridge#31, t1-revive#7 |
-| T1Bridge stack | ✓ installed & verified on A (`0.1.7-1`) | signed `[standardagents]` repo; waiting on an activated T1 to do anything |
+| Touch ID / Touch Bar | ⚠ A: **Touch ID enrolled + verified working** (`right-index-finger`; sudo and polkit by touch, password fallback intact). **Lock-screen fingerprint is deliberately disabled** — the Omarchy lock screen retries `pam_fprintd` every 250 ms with no backoff, and that storm wedged the T1 keybag relay (386+ restarts, all Touch ID dead until a full power-off). Tracked upstream at **omarchy#9905**; re-enable only once its backoff fix lands. **Touch Bar is hardware-dead on A** — dark even under Apple's own Internet Recovery (2026-09-20), so no stack or driver will light it. Cold boot still drops to `05ac:1281`. B: still `05ac:1281` | runbook route 3, 2026-09-18 / 2026-09-20 / 2026-09-21 entries; upstream t1bridge#14, t1bridge#31, omarchy#9905, t1-revive#7 |
+| T1Bridge stack | ✓ installed & verified on A (`0.1.11-1`) | signed `[standardagents]` repo; waiting on an activated T1 to do anything |
 | Lid close suspends a headless box | ✓ fixed | `logind.conf.d` `HandleLidSwitch=ignore` |
 | Reaching B once its panel fails | ✓ fixed | SSH + key + LAN-scoped `ufw` rule (runbook, Headless duty) |
 
