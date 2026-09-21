@@ -486,6 +486,31 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > `t1-up --status` is read-only. Override the clone location with
 > `T1R_ROOT=/path` if it is not `~/t1-revive`.
 
+> ### 2026-09-21 — v0.1.11 display Reply evidence: `GINF` times out after 3 reads
+>
+> Upgraded to t1bridge/t1bridge-dkms `0.1.11-1` (which also fixed our
+> `t1bridge-import.service` bug in `0.1.10` — the importer opened its storage root
+> before EFI discovery's `unshare(CLONE_NEWNS)`, so the descriptor missed the
+> writable mount; `WorkingDirectory` could not fix it, as we found).
+>
+> Captured the maintainer's opt-in `appletbdrm` reply diagnostic during a forced
+> rebind of the failing display interface:
+>
+> ```
+> t1bridge-display v=1 phase=reply kind=information result=error code=-110 attempts=3
+> ```
+>
+> i.e. the `GINF` information reply never arrives; the read times out after 3
+> attempts. Dark at the time, as always. Reported on t1bridge#31.
+>
+> **Procedure gotcha:** enabling
+> `module appletbdrm func appletbdrm_read_response +p` *before* `t1-up` does
+> nothing — the bring-up unloads and reloads `appletbdrm`, and dynamic-debug
+> flags are per module load (`08:14:54 deregistering interface driver
+> appletbdrm`). Enable it **after** the T1 is up, then force the probe:
+> `echo -n '1-3:2.3' | sudo tee /sys/bus/usb/drivers/appletbdrm/bind` (returns
+> "Connection timed out", which is the point). Restore with `-p` afterwards.
+
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
 ### Drivers (once the T1 is activated)
