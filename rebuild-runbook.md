@@ -444,6 +444,12 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > cancelled (Ctrl+C) and when it times out (~30 s). Keep a second root shell open
 > while editing PAM.
 >
+> ⚠ **Lock screen:** in the original PAM wiring the lock screen offers the
+> fingerprint path whenever `/etc/pam.d/omarchy-lock-fingerprint` exists. On this
+> Omarchy build that path retries with no backoff and can wedge the T1 keybag
+> relay — see the 2026-09-21 entry below. That file is deliberately left renamed
+> to `.disabled`; only restore it if the lock-screen retry behaviour is fixed.
+>
 > Machine A now has: regenerated T1, stable `8600` over USB, Touch ID enrolled and
 > verified, sudo/polkit/lock-screen auth by touch. Still missing: the Touch Bar
 > display (`appletbdrm -110`) and cold-boot loading of the ESP.
@@ -510,6 +516,38 @@ activation is what consumes the FDR/EmbeddedOS material. Read it as:
 > appletbdrm`). Enable it **after** the T1 is up, then force the probe:
 > `echo -n '1-3:2.3' | sudo tee /sys/bus/usb/drivers/appletbdrm/bind` (returns
 > "Connection timed out", which is the point). Restore with `-p` afterwards.
+
+> ### 2026-09-21 — keybag relay wedge: lock-screen retry storm, and the fix that held
+>
+> Touch ID stopped matching (every `fprintd-verify` failed immediately, before a
+> touch). Cause was the relay wedge of t1bridge#14, not the sensor:
+> `t1bridge-keybag.service` in a sustained restart loop — **386+ restarts**,
+> `load biometric keybag failed`, no successful load since 08:58 (it had loaded
+> fine an hour earlier). Captured the v0.1.11 diagnostic records for #14: a
+> load-first failure, selector `0x03` rejected with outer `-1` and no inner,
+> cleanup `ok`, lease `code=1`.
+>
+> The thing that preceded the wedge: the **Omarchy lock screen retrying
+> fingerprint auth in a tight loop** — `omarchy-lock-fingerprint` had **68,563**
+> PAM starts in one boot, peaking around **181/minute (~3/s)**, each ending in an
+> fprintd error. The storm began 08:25, 33 minutes before the wedge at 08:58.
+> No suspend or lid test was involved.
+>
+> What fixed it, and held:
+>
+> 1. `sudo mv /etc/pam.d/omarchy-lock-fingerprint /etc/pam.d/omarchy-lock-fingerprint.disabled`
+>    — removes fingerprint from the lock screen only; sudo/polkit fingerprint stay.
+> 2. Full power-off (not reboot) to clear the wedged enclave.
+> 3. `t1-up`.
+>
+> After: relay `active/running`, `NRestarts=0`, zero load failures, and successful
+> `0x0d`/`0x04`/`0x23`/`0x18`/`0x19` replies. **While the lock-screen fingerprint
+> path stays enabled, expect the storm to re-wedge it — until the Omarchy
+> lock-screen retry behaviour is fixed, leave that PAM file disabled.** Reported
+> on t1bridge#14; the storm may also belong in Omarchy (cf. omarchy#11273).
+>
+> To re-enable later: restore the filename, and confirm the lock screen backs off
+> on failure first.
 
 > FDR data is bound to **one physical T1**. One machine's backup can never activate another.
 
